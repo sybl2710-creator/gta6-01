@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velvet Tide — Costa Aurelia</title>
+<style>
+  :root {
+    --ink: #08131a; --panel: rgba(7, 19, 26, 0.82); --edge: rgba(255, 220, 170, 0.22);
+    --gold: #ffc45e; --sand: #f6e6c8; --teal: #43d8c8; --rose: #ff6f61; --muted: #9fb4bd;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); }
+  body { font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; color: #f7f2e8; user-select: none; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+  .hud { position: absolute; inset: 0; transition: opacity .3s; }
+  .hud.dim { opacity: 0; }
+  .hidden { display: none !important; }
+  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; backdrop-filter: blur(6px); }
+
+  #top-left { position: absolute; left: 26px; top: 22px; display: flex; flex-direction: column; gap: 9px; }
+  #health-wrap { width: 236px; }
+  #health-bar { height: 13px; border-radius: 7px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25); overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff6f61, #ffc45e 55%, #58d68d); transition: width .18s; }
+  #health-label { font-size: 11px; letter-spacing: .14em; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; }
+  #cash { font-size: 30px; font-weight: 700; color: var(--gold); text-shadow: 0 2px 12px rgba(0,0,0,.7); letter-spacing: .02em; }
+
+  #top-right { position: absolute; right: 26px; top: 22px; text-align: right; }
+  #stars { font-size: 25px; letter-spacing: 4px; color: rgba(255,255,255,.18); text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+  #stars .on { color: var(--gold); text-shadow: 0 0 12px rgba(255,196,94,.75); }
+  #stars .cool { animation: cool 1s steps(2) infinite; }
+  @keyframes cool { 50% { opacity: .35; } }
+  #clock { font-size: 15px; color: var(--sand); margin-top: 4px; letter-spacing: .08em; }
+
+  #objective { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); max-width: 620px; text-align: center; padding: 8px 20px; border-radius: 10px; background: rgba(6,16,22,.58); border: 1px solid var(--edge); }
+  #objective .tag { font-size: 10px; letter-spacing: .22em; color: var(--teal); text-transform: uppercase; }
+  #objective .txt { font-size: 16px; color: #fff4dd; margin-top: 2px; }
+
+  #map-wrap { position: absolute; left: 26px; bottom: 24px; width: 196px; }
+  #minimap { display: block; width: 196px; height: 196px; border-radius: 50%; border: 2px solid rgba(255, 230, 190, .5); box-shadow: 0 8px 30px rgba(0,0,0,.55); background: #0e1a20; }
+  #map-n { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font-size: 11px; color: var(--sand); letter-spacing: .1em; }
+  #map-street { position: absolute; left: 50%; bottom: -21px; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  #bottom-right { position: absolute; right: 26px; bottom: 26px; text-align: right; }
+  #ammo { font-size: 22px; color: var(--sand); letter-spacing: .06em; }
+  #ammo small { font-size: 13px; color: var(--muted); }
+  #speed { font-size: 33px; font-weight: 700; color: #fff2d8; margin-top: 2px; }
+  #speed small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  #weapon { font-size: 11px; letter-spacing: .18em; color: var(--teal); text-transform: uppercase; }
+
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); opacity: .9; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,.85); box-shadow: 0 0 4px rgba(0,0,0,.9); }
+  #crosshair::before { left: 10px; top: 2px; width: 2px; height: 18px; }
+  #crosshair::after { top: 10px; left: 2px; height: 2px; width: 18px; }
+  #crosshair.armed { border: 1px solid rgba(255,255,255,.7); border-radius: 50%; }
+
+  #toast { position: absolute; left: 50%; bottom: 130px; transform: translateX(-50%); font-size: 15px; color: var(--gold); text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity .35s; }
+  #toast.show { opacity: 1; }
+  #hint { position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%); font-size: 13px; color: #e9e2d3; background: rgba(4,12,18,.6); padding: 6px 14px; border-radius: 9px; border: 1px solid rgba(255,220,170,.18); }
+
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+  .overlay.dark { background: radial-gradient(ellipse at 30% 45%, rgba(4,10,14,.32), rgba(3,8,12,.88) 75%); }
+  #start { justify-content: flex-start; padding: 0 6vw; background: linear-gradient(90deg, rgba(4,12,18,.92) 0%, rgba(4,12,18,.75) 38%, rgba(4,12,18,.12) 72%, rgba(4,12,18,0) 100%); }
+  .start-grid { width: 100%; max-width: 1240px; display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: end; }
+  .kicker { font-size: 12px; letter-spacing: .38em; color: var(--teal); text-transform: uppercase; margin-bottom: 12px; }
+  h1 { margin: 0; font-size: clamp(60px, 8.2vw, 118px); line-height: .88; letter-spacing: -.02em; font-weight: 700; color: #fff6e6; text-shadow: 0 8px 40px rgba(255,150,70,.28); }
+  h1 span { display: block; color: var(--gold); font-size: .42em; letter-spacing: .3em; margin-top: 16px; font-weight: 400; text-transform: uppercase; }
+  .blurb { max-width: 560px; color: #d9d3c6; font-size: 15.5px; line-height: 1.6; margin: 22px 0 18px; }
+  .controls { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px 22px; font-size: 12.5px; color: var(--muted); max-width: 560px; }
+  .controls b { color: var(--sand); font-weight: 600; }
+  .menuside { display: flex; flex-direction: column; gap: 14px; pointer-events: auto; }
+  .card { padding: 16px 18px; }
+  .card h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .24em; text-transform: uppercase; color: var(--teal); font-weight: 600; }
+  .mission-list { display: flex; flex-direction: column; gap: 7px; }
+  .mission { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); color: #f3ecdd; border-radius: 9px; padding: 9px 12px; font: inherit; font-size: 13.5px; cursor: pointer; transition: background .15s, border-color .15s; }
+  .mission:hover:not(:disabled) { background: rgba(255,196,94,.14); border-color: rgba(255,196,94,.5); }
+  .mission:disabled { opacity: .38; cursor: not-allowed; }
+  .mission .no { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,196,94,.18); color: var(--gold); font-size: 11px; display: grid; place-items: center; flex: none; }
+  .mission .done { color: var(--teal); margin-left: auto; font-size: 12px; }
+  .mission .pay { color: var(--gold); margin-left: auto; font-size: 12px; }
+  .mission b { font-weight: 600; }
+  .mission small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .btn-row { display: flex; gap: 10px; margin-top: 2px; }
+  button.big { flex: 1; padding: 14px 20px; border-radius: 11px; border: 1px solid rgba(255,220,170,.4); background: linear-gradient(180deg, #ffd27a, #f0a93c); color: #2a1a06; font: inherit; font-size: 16px; font-weight: 700; letter-spacing: .04em; cursor: pointer; box-shadow: 0 8px 24px rgba(240,169,60,.28); }
+  button.big:hover { filter: brightness(1.07); }
+  button.ghost { flex: 1; padding: 14px 18px; border-radius: 11px; border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.06); color: #f2ead9; font: inherit; font-size: 15px; cursor: pointer; }
+  button.ghost:hover { background: rgba(255,255,255,.13); }
+  .save-note { font-size: 11px; color: var(--muted); margin-top: 9px; text-align: center; }
+
+  #center-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 380px; padding: 30px 36px; text-align: center; pointer-events: auto; }
+  #mission-complete #center-card { top: 31vh; transform: translateX(-50%); min-height: 65vh; }
+  #center-card .kicker { margin-bottom: 8px; }
+  #center-card h2 { margin: 0; font-size: 46px; letter-spacing: .04em; color: #fff4df; }
+  #center-card p { color: #d6cfc1; font-size: 14.5px; line-height: 1.55; margin: 12px 0 20px; }
+  #center-card .payout { font-size: 26px; color: var(--gold); margin: 6px 0 18px; }
+  #pause, #end, #mission-complete { background: rgba(3,8,12,.66); }
+  #end .busted h2 { color: var(--rose); }
+  #end .wasted h2 { color: #ff5a4d; }
+  #mute-badge { position: absolute; right: 28px; top: 92px; font-size: 11px; color: var(--muted); letter-spacing: .16em; }
+  .fade-out { animation: fadeout .5s forwards; }
+  @keyframes fadeout { to { opacity: 0; } }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Velvet Tide, an open-world crime game in Costa Aurelia"></canvas>
+<div id="ui">
+  <div class="hud" id="hud">
+    <div id="top-left">
+      <div id="health-wrap">
+        <div id="health-label">Vitals</div>
+        <div id="health-bar"><div id="health-fill"></div></div>
+      </div>
+      <div id="cash">$0</div>
+    </div>
+    <div id="top-right">
+      <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+      <div id="clock">4:20 PM</div>
+      <div id="mute-badge"></div>
+    </div>
+    <div id="objective"><div class="tag" id="obj-tag">Free Roam</div><div class="txt" id="obj-text">Explore Costa Aurelia</div></div>
+    <div id="map-wrap">
+      <div id="map-n">N</div>
+      <canvas id="minimap" width="392" height="392"></canvas>
+      <div id="map-street">COSTA AURELIA</div>
+    </div>
+    <div id="bottom-right">
+      <div id="weapon">Unarmed</div>
+      <div id="ammo">—</div>
+      <div id="speed" class="hidden">0<small> mph</small></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="hint" class="hidden"></div>
+    <div id="toast"></div>
+  </div>
+
+  <div class="overlay" id="start">
+    <div class="start-grid">
+      <div>
+        <div class="kicker">An open-world crime story · Costa Aurelia</div>
+        <h1>VELVET<br>TIDE<span>Sun. Salt. Bad Money.</span></h1>
+        <p class="blurb">You came back to Costa Aurelia with a debt, a burner phone and no car. Marisol Vane has work for a driver who can keep his nerve — from the marina to the lighthouse, the whole sunlit coast is yours to take. Just remember: the police here are paid to be curious.</p>
+        <div class="controls">
+          <div><b>WASD</b> move / drive</div><div><b>Mouse</b> look · <b>Click</b> punch / shoot</div>
+          <div><b>Shift</b> sprint · <b>Space</b> jump / handbrake</div><div><b>E</b> steal or leave a car</div>
+          <div><b>R</b> reload · <b>M</b> mute</div><div><b>Esc</b> pause</div>
+        </div>
+      </div>
+      <div class="menuside">
+        <div class="card panel">
+          <h2>Jobs for Marisol</h2>
+          <div class="mission-list" id="mission-list"></div>
+        </div>
+        <div class="card panel">
+          <div class="btn-row">
+            <button class="big" id="play-btn">Play</button>
+            <button class="ghost hidden" id="continue-btn">Continue</button>
+          </div>
+          <div class="save-note" id="save-note">Click a job to start it, or Play for free roam.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay dark hidden" id="pause">
+    <div class="panel" id="center-card">
+      <div class="kicker">Costa Aurelia awaits</div>
+      <h2>PAUSED</h2>
+      <p>The tide never stops. Neither do the cops.</p>
+      <div class="btn-row">
+        <button class="big" id="resume-btn">Resume</button>
+        <button class="ghost" id="quit-btn">Quit to title</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay dark hidden" id="end">
+    <div class="panel busted" id="end-card">
+      <div class="kicker" id="end-kicker">Costa Aurelia Police Department</div>
+      <h2 id="end-title">BUSTED</h2>
+      <p id="end-text">They caught up with you. The city always does.</p>
+      <div class="btn-row">
+        <button class="big" id="restart-btn">Restart</button>
+        <button class="ghost" id="end-quit-btn">Title</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay dark hidden" id="mission-complete">
+    <div class="panel" id="center-card">
+      <div class="kicker">Job done · Marisol Vane</div>
+      <h2>MISSION COMPLETE</h2>
+      <p id="mc-name">First Light</p>
+      <div class="payout" id="mc-payout">+$800</div>
+      <div class="btn-row">
+        <button class="big" id="mc-continue">Keep driving</button>
+      </div>
+    </div>
+  </div>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
